@@ -1,0 +1,5 @@
+import Link from "next/link";
+
+export default function RegisterPage() {
+  return <main className="grid min-h-screen place-items-center bg-slate-50 p-6"><section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm"><Link href="/" className="text-sm font-semibold text-indigo-600">← NexusAI</Link><h1 className="mt-8 text-2xl font-semibold">Create your workspace</h1><p className="mt-2 text-sm text-slate-500">Account creation will be connected after the database phase.</p><div className="mt-7 space-y-4"><input className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" placeholder="Full name" /><input className="w-full rounded-lg border border-slate-200 px-3 py-2.5 text-sm" placeholder="Work email" type="email" /><Link href="/dashboard" className="block rounded-lg bg-indigo-600 px-4 py-2.5 text-center text-sm font-medium text-white">Continue to demo</Link></div><p className="mt-6 text-center text-sm text-slate-500">Already have an account? <Link href="/login" className="font-medium text-indigo-600">Sign in</Link></p></section></main>;
+}
