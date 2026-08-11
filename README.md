@@ -1,4 +1,4 @@
-# NexusAI — Enterprise AI Operating System
+# Nexus — Enterprise AI Operating System
 
 NexusAI is a full-stack enterprise AI platform for bringing company knowledge, AI-assisted work, business workflows, and operational insight into one secure workspace.
 
