@@ -1,12 +1,12 @@
 # Nexus — Enterprise AI Operating System
 
-NexusAI is a full-stack enterprise AI platform for bringing company knowledge, AI-assisted work, business workflows, and operational insight into one secure workspace.
+Nexus is a full-stack enterprise AI platform for bringing company knowledge, AI-assisted work, business workflows, and operational insight into one secure workspace.
 
 The project is designed as an AI/ML engineering portfolio application: it demonstrates modern frontend engineering, typed REST APIs, secure identity and access control, retrieval-augmented generation (RAG), AI agents, workflow automation, and deployment practices.
 
 > **Current status:** Frontend workspace foundation and FastAPI service foundation are complete. Pages currently use clearly labeled demo data; database, authentication, document intelligence, RAG, agents, and workflow execution are planned next.
 
-## Why NexusAI?
+## Why Nexus?
 
 Organizations often keep policies, reports, documents, workflows, and AI tools in separate systems. NexusAI aims to provide one role-aware workspace where employees can:
 
@@ -84,7 +84,7 @@ flowchart TB
 ## Repository structure
 
 ```text
-NEXUS-AI/
+NEXUS/
 ├── backend/
 │   ├── app/
 │   │   ├── api/          # API routers (grows with the product)
@@ -130,8 +130,8 @@ PostgreSQL and Docker are not required for the current frontend and API foundati
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/PrathamDixit321/NEXUS-AI.git
-cd NEXUS-AI
+git clone https://github.com/PrathamDixit321/NEXUS.git
+cd NEXUS
 ```
 
 ### 2. Run the frontend
