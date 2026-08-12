@@ -1,2 +1,5 @@
-import { WorkspacePage } from "@/components/workspace-page";
-export default function DocumentsPage() { return <WorkspacePage eyebrow="Document intelligence" title="Documents" description="Manage the files that will power permission-aware search and AI answers." action="Upload document" metrics={[{ label: "Total documents", value: "84", change: "+12 this month" }, { label: "Processing queue", value: "0", change: "No files waiting" }, { label: "Storage used", value: "2.8 GB", change: "of 10 GB" }]} items={[{ title: "Q2 Sales Report.pdf", detail: "Finance · Updated today", status: "Ready" }, { title: "Employee Handbook.docx", detail: "HR · Updated yesterday", status: "Ready" }, { title: "Product Roadmap.pptx", detail: "Product · Updated Aug 6", status: "Ready" }]} />; }
+import { DocumentKnowledgeUI } from "@/components/document-knowledge-ui";
+
+export default function DocumentsPage() {
+  return <DocumentKnowledgeUI initialView="documents" />;
+}
