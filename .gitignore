@@ -33,9 +33,11 @@ yarn-error.log*
 *.db
 *.sqlite3
 *.sqlite
+backend/data/
 
 # IDEs & System
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
+*.log
