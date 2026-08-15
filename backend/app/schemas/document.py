@@ -17,3 +17,15 @@ class DocumentRead(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+
+
+class DocumentChunkRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    document_id: str
+    chunk_index: int
+    content: str
+    page_number: int | None
+    created_at: datetime
+
