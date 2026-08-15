@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import get_settings
 from app.api.documents import router as documents_router
 from app.api.auth import router as auth_router
+from app.api.chat import router as chat_router
 from app.db.database import Base, engine, SessionLocal
 from app.models.document import Document  # noqa: F401 - registers the table with SQLAlchemy
 from app.models.auth import User, Role, Permission, UserSession, AuditLog  # noqa: F401 - registers auth tables
@@ -44,6 +45,7 @@ app.add_middleware(
 
 app.include_router(documents_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])

@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 import pypdf
@@ -6,6 +7,7 @@ import docx
 from app.core.config import get_settings
 from app.db.database import SessionLocal
 from app.models.document import Document, DocumentChunk
+from app.services.ai_service import get_embedding
 
 logger = logging.getLogger("nexusai.document_service")
 settings = get_settings()
@@ -143,11 +145,17 @@ def process_document_background(document_id: str) -> None:
                 for chunk_content in chunks:
                     if not chunk_content.strip():
                         continue
+                    
+                    # Generate vector embedding for this chunk
+                    embedding = get_embedding(chunk_content)
+                    embedding_json = json.dumps(embedding)
+                    
                     db_chunk = DocumentChunk(
                         document_id=document.id,
                         chunk_index=chunk_idx,
                         content=chunk_content,
                         page_number=page_num,
+                        embedding_json=embedding_json,
                     )
                     db_chunks.append(db_chunk)
                     chunk_idx += 1

@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./data/nexus.db"
     upload_dir: str = "./data/uploads"
     max_upload_size_mb: int = 50
+    gemini_api_key: str | None = None
+    openai_api_key: str | None = None
 
     # JWT Authentication Security Settings
     secret_key: str = "39fbc8b609c13b35ebde214b7e923e4c41ef5e6b1897c8d91c13d8097b6a12df"  # Generate random key in prod
