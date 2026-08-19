@@ -2,8 +2,11 @@ import logging
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+from app.db.database import get_db
 
 from app.core.config import get_settings
 from app.api.documents import router as documents_router
@@ -51,11 +54,49 @@ app.include_router(agents_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])
-async def health_check() -> dict[str, str]:
-    """Return the service status for local checks and future deployment probes."""
+def health_check(
+    db: Session = Depends(get_db)
+) -> dict:
+    """Check database connectivity and storage directory write access for system health monitoring."""
     logger.info("Health check endpoint hit")
+    
+    # 1. Check database connection
+    db_status = "unhealthy"
+    try:
+        db.execute(text("SELECT 1"))
+        db_status = "healthy"
+    except Exception as e:
+        logger.error(f"Database health probe failed: {e}")
+        
+    # 2. Check storage path write access
+    storage_status = "unhealthy"
+    try:
+        storage_path = settings.storage_path
+        storage_path.mkdir(parents=True, exist_ok=True)
+        temp_file = storage_path / ".healthcheck"
+        temp_file.write_text("ok", encoding="utf-8")
+        temp_file.unlink()
+        storage_status = "healthy"
+    except Exception as e:
+        logger.error(f"Storage path health probe failed: {e}")
+        
+    # 3. Handle service failures
+    if db_status != "healthy" or storage_status != "healthy":
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "database": db_status,
+                "storage": storage_status,
+                "service": settings.app_name,
+                "version": settings.app_version
+            }
+        )
+        
     return {
         "status": "healthy",
+        "database": db_status,
+        "storage": storage_status,
         "service": settings.app_name,
-        "version": settings.app_version,
+        "version": settings.app_version
     }

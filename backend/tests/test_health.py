@@ -11,6 +11,8 @@ def test_health_check_returns_service_status() -> None:
     assert response.status_code == 200
     assert response.json() == {
         "status": "healthy",
+        "database": "healthy",
+        "storage": "healthy",
         "service": "Nexus API",
         "version": "0.1.0",
     }
