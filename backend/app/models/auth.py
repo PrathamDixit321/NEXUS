@@ -49,6 +49,34 @@ class Role(Base):
     users: Mapped[List["User"]] = relationship("User", back_populates="role")
 
 
+class Department(Base):
+    """Department model representing organization units (e.g. 'Engineering', 'HR')."""
+    __tablename__ = "departments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
+
+    # Relationships
+    teams: Mapped[List["Team"]] = relationship(
+        "Team", back_populates="department", cascade="all, delete-orphan"
+    )
+    users: Mapped[List["User"]] = relationship("User", back_populates="department_rel")
+
+
+class Team(Base):
+    """Team model representing sub-units within a Department."""
+    __tablename__ = "teams"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    department_id: Mapped[int] = mapped_column(Integer, ForeignKey("departments.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+
+    # Relationships
+    department: Mapped[Department] = relationship("Department", back_populates="teams")
+    users: Mapped[List["User"]] = relationship("User", back_populates="team")
+
+
 class User(Base):
     """User account model mapping credentials, profile elements, and role linkages."""
     __tablename__ = "users"
@@ -57,17 +85,27 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    department_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("departments.id", ondelete="SET NULL"), nullable=True)
+    team_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("teams.id", ondelete="SET NULL"), nullable=True)
     company_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     role_id: Mapped[int] = mapped_column(Integer, ForeignKey("roles.id", ondelete="RESTRICT"), nullable=False)
+    manager_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     # Relationships
     role: Mapped[Role] = relationship("Role", back_populates="users")
+    department_rel: Mapped[Optional[Department]] = relationship("Department", back_populates="users")
+    team: Mapped[Optional[Team]] = relationship("Team", back_populates="users")
+    manager: Mapped[Optional["User"]] = relationship("User", remote_side=[id])
     sessions: Mapped[List["UserSession"]] = relationship("UserSession", back_populates="user", cascade="all, delete-orphan")
     audit_logs: Mapped[List["AuditLog"]] = relationship("AuditLog", back_populates="user")
+
+    @property
+    def department(self) -> Optional[str]:
+        """Expose department name as a dynamic string for backward compatibility."""
+        return self.department_rel.name if self.department_rel else None
 
 
 class UserSession(Base):

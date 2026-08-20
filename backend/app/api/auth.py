@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash, verify_password
 from app.db.database import get_db
-from app.models.auth import Role, User
+from app.models.auth import Role, User, Department
 from app.schemas.auth import (
     TokenRefreshRequest,
     TokenResponse,
@@ -106,12 +106,31 @@ def register(request: Request, payload: UserRegisterRequest, db: Session = Depen
     # Hash user password
     hashed_pass = get_password_hash(payload.password)
 
+    # Look up department by name or code if specified, creating dynamically if missing
+    dept_id = None
+    if payload.department:
+        dept = db.query(Department).filter(
+            (Department.name == payload.department) | 
+            (Department.code == payload.department)
+        ).first()
+        if not dept:
+            dept_code = payload.department.strip()[:20].upper()
+            base_code = dept_code
+            counter = 1
+            while db.query(Department).filter(Department.code == dept_code).first():
+                dept_code = f"{base_code[:17]}_{counter}"
+                counter += 1
+            dept = Department(name=payload.department.strip(), code=dept_code)
+            db.add(dept)
+            db.flush()
+        dept_id = dept.id
+
     # Create new User model
     new_user = User(
         email=payload.email,
         hashed_password=hashed_pass,
         full_name=payload.full_name,
-        department=payload.department,
+        department_id=dept_id,
         company_name=payload.company_name,
         role_id=default_role.id,
     )
@@ -232,7 +251,24 @@ def update_profile(
     if payload.full_name is not None:
         current_user.full_name = payload.full_name
     if payload.department is not None:
-        current_user.department = payload.department
+        dept_id = None
+        if payload.department.strip():
+            dept = db.query(Department).filter(
+                (Department.name == payload.department) | 
+                (Department.code == payload.department)
+            ).first()
+            if not dept:
+                dept_code = payload.department.strip()[:20].upper()
+                base_code = dept_code
+                counter = 1
+                while db.query(Department).filter(Department.code == dept_code).first():
+                    dept_code = f"{base_code[:17]}_{counter}"
+                    counter += 1
+                dept = Department(name=payload.department.strip(), code=dept_code)
+                db.add(dept)
+                db.flush()
+            dept_id = dept.id
+        current_user.department_id = dept_id
     if payload.company_name is not None:
         current_user.company_name = payload.company_name
 
