@@ -155,7 +155,7 @@ export function DocumentKnowledgeUI({ initialView }: { initialView: "knowledge" 
 
   // Add explicit grant rule
   function addPermissionGrant() {
-    if (!newSubjectId.strip()) return;
+    if (!newSubjectId.trim()) return;
     const isDuplicate = permissionsList.some(
       (p) => p.subject_type === newSubjectType && p.subject_id === newSubjectId
     );

@@ -1,11 +1,11 @@
-"""API endpoints managing AI Agent profiles, execution workflows, and tool authorization guards."""
+"""API endpoints managing AI Agent profiles, execution workflows, tool authorization guards, and security compliance auditing."""
 
 from datetime import datetime
 import json
 import logging
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.models.document import Document, DocumentChunk, DocumentPermission
 from app.schemas.agent import AgentProfile, AgentResponse, AgentRunRequest, ToolExecution
 from app.schemas.chat import CitationSource
 from app.services.ai_service import cosine_similarity, generate_completion, get_embedding
+from app.services.auth_service import log_auth_event
 
 logger = logging.getLogger("nexusai.api.agents")
 router = APIRouter(prefix="/agents", tags=["Agents"])
@@ -90,6 +91,7 @@ def list_agents(current_user: User = Depends(get_current_user)) -> List[AgentPro
 def run_agent(
     agent_id: str,
     payload: AgentRunRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AgentResponse:
@@ -181,6 +183,9 @@ def run_agent(
     
     def process_tool_execution(tool_name: str, success_action: str):
         allowed_roles = ALLOWED_ROLES_FOR_TOOLS.get(tool_name, set())
+        ip_addr = request.client.host if request.client else None
+        user_agt = request.headers.get("user-agent")
+
         if role_name in allowed_roles:
             tool_calls.append(
                 ToolExecution(
@@ -189,6 +194,18 @@ def run_agent(
                     status="SUCCESS",
                     timestamp=timestamp_str
                 )
+            )
+            # Log audit event
+            log_auth_event(
+                db=db,
+                action="AGENT_TOOL_ALLOWED",
+                user_id=current_user.id,
+                resource_type="AGENT_TOOL",
+                resource_id=tool_name,
+                result="SUCCESS",
+                details=f"Agent '{agent_id}' executed tool '{tool_name}' successfully: '{success_action}'",
+                ip_address=ip_addr,
+                user_agent=user_agt
             )
         else:
             logger.warning(f"User {current_user.email} (Role: {role_name}) blocked from executing tool: {tool_name}")
@@ -199,6 +216,18 @@ def run_agent(
                     status="DENIED",
                     timestamp=timestamp_str
                 )
+            )
+            # Log audit event
+            log_auth_event(
+                db=db,
+                action="AGENT_TOOL_DENIED",
+                user_id=current_user.id,
+                resource_type="AGENT_TOOL",
+                resource_id=tool_name,
+                result="DENIED",
+                details=f"Agent '{agent_id}' execution of tool '{tool_name}' blocked due to role '{role_name}' restrictions",
+                ip_address=ip_addr,
+                user_agent=user_agt
             )
 
     if agent_id == "hr-policy":

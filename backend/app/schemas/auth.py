@@ -53,3 +53,22 @@ class TokenResponse(BaseModel):
 class TokenRefreshRequest(BaseModel):
     """Payload schema containing the refresh token to renew credentials."""
     refresh_token: str = Field(..., description="Active session refresh token")
+
+
+class AuditLogResponse(BaseModel):
+    """Response schema containing audit log entries for compliance viewing."""
+    id: str
+    user_id: Optional[str] = None
+    user_email: Optional[str] = None
+    user_name: Optional[str] = None
+    action: str
+    resource_type: Optional[str] = None
+    resource_id: Optional[str] = None
+    result: Optional[str] = None
+    details: Optional[str] = None
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

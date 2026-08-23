@@ -41,6 +41,10 @@ def log_auth_event(
     db: Session,
     action: str,
     user_id: Optional[str] = None,
+    resource_type: Optional[str] = None,
+    resource_id: Optional[str] = None,
+    result: Optional[str] = None,
+    details: Optional[str] = None,
     ip_address: Optional[str] = None,
     user_agent: Optional[str] = None,
 ) -> None:
@@ -49,6 +53,10 @@ def log_auth_event(
         log_entry = AuditLog(
             user_id=user_id,
             action=action,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            result=result,
+            details=details,
             ip_address=ip_address,
             user_agent=user_agent
         )

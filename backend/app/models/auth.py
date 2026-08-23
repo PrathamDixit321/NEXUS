@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 from typing import List, Optional
 
-from sqlalchemy import Table, Column, String, Integer, DateTime, Boolean, ForeignKey
+from sqlalchemy import Table, Column, String, Integer, DateTime, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -130,6 +130,10 @@ class AuditLog(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     user_id: Mapped[Optional[str]] = mapped_column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    resource_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    result: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     ip_address: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)  # Supports IPv6 length
     user_agent: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(UTC))

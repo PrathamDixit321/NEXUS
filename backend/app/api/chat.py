@@ -1,9 +1,9 @@
-"""API endpoints for interactive RAG assistant chat operations with strict access control filtering."""
+"""API endpoints for interactive RAG assistant chat operations with strict access control filtering and auditing."""
 
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
@@ -13,6 +13,7 @@ from app.models.auth import User
 from app.models.document import Document, DocumentChunk, DocumentPermission
 from app.schemas.chat import ChatRequest, ChatResponse, CitationSource
 from app.services.ai_service import cosine_similarity, generate_completion, get_embedding
+from app.services.auth_service import log_auth_event
 
 logger = logging.getLogger("nexusai.api.chat")
 router = APIRouter(prefix="/chat", tags=["Chat"])
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/chat", tags=["Chat"])
 @router.post("", response_model=ChatResponse)
 def query_assistant(
     payload: ChatRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> ChatResponse:
@@ -28,6 +30,8 @@ def query_assistant(
     try:
         # 1. Get embedding vector for query
         query_vector = get_embedding(payload.message)
+        ip_addr = request.client.host if request.client else None
+        user_agt = request.headers.get("user-agent")
         
         # 2. Query only authorized document IDs
         if current_user.role.name in ("Admin", "CEO"):
@@ -64,6 +68,16 @@ def query_assistant(
 
         # If no authorized documents exist, return gracefully without querying vector similarity or leaking info
         if not authorized_doc_ids:
+            log_auth_event(
+                db=db,
+                action="RAG_ACCESS_DENIED",
+                user_id=current_user.id,
+                resource_type="RAG",
+                result="DENIED",
+                details=f"Query: '{payload.message[:80]}...' - access denied: no authorized document contexts exist in database matching scope.",
+                ip_address=ip_addr,
+                user_agent=user_agt
+            )
             return ChatResponse(
                 response="I don't have access to information that can answer this question.",
                 citations=[]
@@ -106,6 +120,18 @@ def query_assistant(
                 )
                 
         context_string = "\n\n---\n\n".join(context_blocks)
+
+        # Log audit log compliance trace for RAG retrieval
+        log_auth_event(
+            db=db,
+            action="RAG_ACCESS_GRANTED",
+            user_id=current_user.id,
+            resource_type="RAG",
+            result="SUCCESS",
+            details=f"Query: '{payload.message[:80]}...' - access granted: matches {len(citations)} citations from {len(authorized_doc_ids)} authorized files.",
+            ip_address=ip_addr,
+            user_agent=user_agt
+        )
         
         # 7. Generate grounded response from LLM service
         system_prompt = (

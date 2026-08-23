@@ -1,10 +1,10 @@
-"""Document upload, metadata, chunk, download, and access permissions endpoints."""
+"""Document upload, metadata, chunk, download, and access permissions endpoints with detailed security auditing."""
 
 from pathlib import Path
 from uuid import uuid4
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import Select, select, or_
 from sqlalchemy.orm import Session
@@ -22,6 +22,7 @@ from app.schemas.document import (
     PermissionGrant
 )
 from app.services.document_service import process_document_background
+from app.services.auth_service import log_auth_event
 from app.services.access_control import (
     can_view_document,
     can_download_document,
@@ -99,13 +100,45 @@ def list_documents(
 @router.get("/{document_id}", response_model=DocumentRead)
 def get_document(
     document_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> Document:
     """Retrieves document details after validating view rights (returns 404 on breach to prevent discovery leaks)."""
     document = db.get(Document, document_id)
-    if not document or not can_view_document(current_user, document, db):
+    ip_addr = request.client.host if request.client else None
+    user_agt = request.headers.get("user-agent")
+
+    if document and not can_view_document(current_user, document, db):
+        log_auth_event(
+            db=db,
+            action="PERMISSION_DENIED",
+            user_id=current_user.id,
+            resource_type="DOCUMENT",
+            resource_id=document_id,
+            result="DENIED",
+            details=f"Access denied attempting to view document '{document.name}'",
+            ip_address=ip_addr,
+            user_agent=user_agt
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    # Audit success access
+    log_auth_event(
+        db=db,
+        action="DOCUMENT_VIEWED",
+        user_id=current_user.id,
+        resource_type="DOCUMENT",
+        resource_id=document.id,
+        result="SUCCESS",
+        details=f"Viewed document '{document.name}' details",
+        ip_address=ip_addr,
+        user_agent=user_agt
+    )
+
     return document
 
 
@@ -125,6 +158,7 @@ def get_document_chunks(
 @router.post("", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     collection: str = Form("General"),
     classification: str = Form("INTERNAL"),
@@ -135,11 +169,24 @@ async def upload_document(
     """Uploads and registers a new document after validating uploader sharing authority limits."""
     filename = Path(file.filename or "").name
     extension = Path(filename).suffix.lower()
+    ip_addr = request.client.host if request.client else None
+    user_agt = request.headers.get("user-agent")
+
     if not filename or extension not in allowed_extensions:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Only PDF, DOCX, PPTX, and XLSX files are supported")
 
     # Enforce sharing authority settings limits
     if not validate_sharing_authority(current_user, default_access, [], db):
+        log_auth_event(
+            db=db,
+            action="PERMISSION_DENIED",
+            user_id=current_user.id,
+            resource_type="DOCUMENT",
+            result="DENIED",
+            details=f"Access denied attempting to upload document '{filename}' with visibility '{default_access}'",
+            ip_address=ip_addr,
+            user_agent=user_agt
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your organizational role does not possess authority to publish at this visibility level."
@@ -173,6 +220,19 @@ async def upload_document(
     db.commit()
     db.refresh(document)
     
+    # Log upload action to audit log
+    log_auth_event(
+        db=db,
+        action="DOCUMENT_UPLOADED",
+        user_id=current_user.id,
+        resource_type="DOCUMENT",
+        resource_id=document.id,
+        result="SUCCESS",
+        details=f"Uploaded document '{document.name}' with visibility '{document.default_access}'",
+        ip_address=ip_addr,
+        user_agent=user_agt
+    )
+
     # Trigger background text extraction and chunking
     background_tasks.add_task(process_document_background, document.id)
     
@@ -182,18 +242,48 @@ async def upload_document(
 @router.get("/{document_id}/download")
 def download_document(
     document_id: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Enforces download authorization policies before returning file content."""
     document = db.get(Document, document_id)
-    if not document or not can_download_document(current_user, document, db):
+    ip_addr = request.client.host if request.client else None
+    user_agt = request.headers.get("user-agent")
+
+    if document and not can_download_document(current_user, document, db):
+        log_auth_event(
+            db=db,
+            action="PERMISSION_DENIED",
+            user_id=current_user.id,
+            resource_type="DOCUMENT",
+            resource_id=document_id,
+            result="DENIED",
+            details=f"Access denied attempting to download document '{document.name}'",
+            ip_address=ip_addr,
+            user_agent=user_agt
+        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+        
+    if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
         
     filepath = settings.storage_path / document.storage_key
     if not filepath.exists():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document storage file not found on disk")
         
+    log_auth_event(
+        db=db,
+        action="DOCUMENT_DOWNLOADED",
+        user_id=current_user.id,
+        resource_type="DOCUMENT",
+        resource_id=document.id,
+        result="SUCCESS",
+        details=f"Downloaded document '{document.name}'",
+        ip_address=ip_addr,
+        user_agent=user_agt
+    )
+
     return FileResponse(
         path=filepath,
         media_type=document.content_type,
@@ -228,12 +318,27 @@ def get_document_permissions(
 def update_document_permissions(
     document_id: str,
     payload: DocumentPermissionsUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Saves new visibility and access configuration policies after confirming edit/share authorization checks."""
     document = db.get(Document, document_id)
+    ip_addr = request.client.host if request.client else None
+    user_agt = request.headers.get("user-agent")
+
     if not document or not can_edit_document(current_user, document, db):
+        log_auth_event(
+            db=db,
+            action="PERMISSION_DENIED",
+            user_id=current_user.id,
+            resource_type="DOCUMENT",
+            resource_id=document_id,
+            result="DENIED",
+            details=f"Access denied attempting to share document permissions settings",
+            ip_address=ip_addr,
+            user_agent=user_agt
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
         
     shares_list = [
@@ -246,6 +351,17 @@ def update_document_permissions(
     ]
     
     if not validate_sharing_authority(current_user, payload.default_access, shares_list, db):
+        log_auth_event(
+            db=db,
+            action="PERMISSION_DENIED",
+            user_id=current_user.id,
+            resource_type="DOCUMENT",
+            resource_id=document.id,
+            result="DENIED",
+            details=f"Sharing settings block: settings exceed uploader authority limits",
+            ip_address=ip_addr,
+            user_agent=user_agt
+        )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Sharing configuration exceeds your organizational role boundaries."
@@ -268,6 +384,19 @@ def update_document_permissions(
     db.commit()
     db.refresh(document)
     
+    # Log successful configuration updates
+    log_auth_event(
+        db=db,
+        action="PERMISSION_CHANGED",
+        user_id=current_user.id,
+        resource_type="DOCUMENT",
+        resource_id=document.id,
+        result="SUCCESS",
+        details=f"Changed visibility setting default to '{document.default_access}' and classification to '{document.classification}'",
+        ip_address=ip_addr,
+        user_agent=user_agt
+    )
+
     grants = db.query(DocumentPermission).filter(DocumentPermission.document_id == document.id).all()
     return {
         "owner_id": document.owner_id,
