@@ -1,4 +1,4 @@
-"""API endpoints managing AI Agent profiles and execution workflows."""
+"""API endpoints managing AI Agent profiles, execution workflows, and tool authorization guards."""
 
 from datetime import datetime
 import json
@@ -6,13 +6,13 @@ import logging
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.db.database import get_db
 from app.models.auth import User
-from app.models.document import Document, DocumentChunk
+from app.models.document import Document, DocumentChunk, DocumentPermission
 from app.schemas.agent import AgentProfile, AgentResponse, AgentRunRequest, ToolExecution
 from app.schemas.chat import CitationSource
 from app.services.ai_service import cosine_similarity, generate_completion, get_embedding
@@ -60,6 +60,16 @@ AGENT_PROFILES: Dict[str, dict] = {
     }
 }
 
+# Deterministic tool access permissions mapping (Security Guard Layer)
+ALLOWED_ROLES_FOR_TOOLS = {
+    "notify-hr-team": {"Admin", "CEO", "HR Manager", "HR Staff", "Employee"},
+    "export-excel": {"Admin", "CEO", "Finance Manager", "Finance Staff"},
+    "escalate-ticket": {"Admin", "CEO", "Manager", "Team Lead", "HR Manager", "Finance Manager"},
+    "generate-leave-form": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"},
+    "math-calculator": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"},
+    "create-jira-issue": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"}
+}
+
 
 @router.get("", response_model=List[AgentProfile])
 def list_agents(current_user: User = Depends(get_current_user)) -> List[AgentProfile]:
@@ -93,103 +103,145 @@ def run_agent(
     agent = AGENT_PROFILES[agent_id]
     msg_lower = payload.message.lower()
     
-    # 1. Perform context retrieval filtered by agent collection
+    # 1. Perform context retrieval filtered by agent collection and user permissions
     context_blocks = []
     citations = []
     
     try:
         query_vector = get_embedding(payload.message)
-        statement = select(DocumentChunk).join(Document).where(Document.collection == agent["collection_bind"])
-        chunks = db.scalars(statement).all()
         
-        scored_chunks = []
-        for chunk in chunks:
-            if not chunk.embedding_json:
-                continue
-            try:
-                chunk_vector = json.loads(chunk.embedding_json)
-                sim = cosine_similarity(query_vector, chunk_vector)
-                scored_chunks.append((chunk, sim))
-            except Exception as e:
-                logger.error(f"Error parsing chunk embedding {chunk.id}: {e}")
-                
-        scored_chunks.sort(key=lambda x: x[1], reverse=True)
-        
-        for chunk, sim in scored_chunks[:3]:
-            if sim > 0.05:
-                context_blocks.append(f"[Source: {chunk.document.name} (Page {chunk.page_number})]\n{chunk.content}")
-                citations.append(
-                    CitationSource(
-                        document_name=chunk.document.name,
-                        page_number=chunk.page_number,
-                        similarity=round(sim, 3)
+        # Build secure document ID lookup query
+        if current_user.role.name in ("Admin", "CEO"):
+            doc_stmt = select(Document.id)
+        else:
+            owner_cond = (Document.owner_id == current_user.id)
+            org_cond = (Document.default_access == "ORGANIZATION")
+            dept_cond = (Document.default_access == "DEPARTMENT") & (Document.department_id == current_user.department_id) if current_user.department_id else False
+            team_cond = (Document.default_access == "TEAM") & (Document.team_id == current_user.team_id) if current_user.team_id else False
+
+            subjects = [("USER", current_user.id), ("ROLE", str(current_user.role_id))]
+            if current_user.department_id:
+                subjects.append(("DEPARTMENT", str(current_user.department_id)))
+            if current_user.team_id:
+                subjects.append(("TEAM", str(current_user.team_id)))
+
+            clauses = [
+                (DocumentPermission.subject_type == s_type) & (DocumentPermission.subject_id == s_id)
+                for s_type, s_id in subjects
+            ]
+
+            filter_conds = [owner_cond, org_cond, dept_cond, team_cond]
+
+            if clauses:
+                explicit_ids = select(DocumentPermission.document_id).where(or_(*clauses))
+                filter_conds.append(Document.id.in_(explicit_ids))
+
+            doc_stmt = select(Document.id).where(or_(*filter_conds))
+
+        # Filter by Agent collection bind
+        doc_stmt = doc_stmt.where(Document.collection == agent["collection_bind"])
+        authorized_doc_ids = db.scalars(doc_stmt).all()
+
+        if authorized_doc_ids:
+            statement = select(DocumentChunk).where(DocumentChunk.document_id.in_(authorized_doc_ids))
+            chunks = db.scalars(statement).all()
+            
+            scored_chunks = []
+            for chunk in chunks:
+                if not chunk.embedding_json:
+                    continue
+                try:
+                    chunk_vector = json.loads(chunk.embedding_json)
+                    sim = cosine_similarity(query_vector, chunk_vector)
+                    scored_chunks.append((chunk, sim))
+                except Exception as e:
+                    logger.error(f"Error parsing chunk embedding {chunk.id}: {e}")
+                    
+            scored_chunks.sort(key=lambda x: x[1], reverse=True)
+            
+            for chunk, sim in scored_chunks[:3]:
+                if sim > 0.05:
+                    context_blocks.append(f"[Source: {chunk.document.name} (Page {chunk.page_number})]\n{chunk.content}")
+                    citations.append(
+                        CitationSource(
+                            document_name=chunk.document.name,
+                            page_number=chunk.page_number,
+                            similarity=round(sim, 3)
+                        )
                     )
-                )
     except Exception as e:
         logger.error(f"Error retrieving context for agent {agent_id}: {e}")
         
     context_string = "\n\n---\n\n".join(context_blocks)
     
-    # 2. Inspect keywords and simulate tool calls
+    # 2. Inspect keywords and simulate tool calls with security boundaries checks
     tool_calls = []
     timestamp_str = datetime.now().isoformat()
+    role_name = current_user.role.name
     
-    if agent_id == "hr-policy":
-        if any(kw in msg_lower for kw in ["notify", "send", "submit", "contact"]):
+    def process_tool_execution(tool_name: str, success_action: str):
+        allowed_roles = ALLOWED_ROLES_FOR_TOOLS.get(tool_name, set())
+        if role_name in allowed_roles:
             tool_calls.append(
                 ToolExecution(
-                    tool_name="notify-hr-team",
-                    action_taken=f"Sent Slack message to HR channel for {current_user.full_name}",
+                    tool_name=tool_name,
+                    action_taken=success_action,
                     status="SUCCESS",
                     timestamp=timestamp_str
                 )
             )
-        if any(kw in msg_lower for kw in ["leave", "vacation", "holiday", "sick"]):
+        else:
+            logger.warning(f"User {current_user.email} (Role: {role_name}) blocked from executing tool: {tool_name}")
             tool_calls.append(
                 ToolExecution(
-                    tool_name="generate-leave-form",
-                    action_taken="Drafted official PDF vacation application form",
-                    status="SUCCESS",
+                    tool_name=tool_name,
+                    action_taken=f"Access Denied: Role '{role_name}' lacks required capability scope.",
+                    status="DENIED",
                     timestamp=timestamp_str
                 )
+            )
+
+    if agent_id == "hr-policy":
+        if any(kw in msg_lower for kw in ["notify", "send", "submit", "contact"]):
+            process_tool_execution(
+                "notify-hr-team",
+                f"Sent Slack message to HR channel for {current_user.full_name}"
+            )
+        if any(kw in msg_lower for kw in ["leave", "vacation", "holiday", "sick"]):
+            process_tool_execution(
+                "generate-leave-form",
+                "Drafted official PDF vacation application form"
             )
             
     elif agent_id == "finance-analyst":
         if any(kw in msg_lower for kw in ["calculate", "sum", "math", "total", "average", "compute"]):
-            tool_calls.append(
-                ToolExecution(
-                    tool_name="math-calculator",
-                    action_taken="Computed sum totals and verified balance calculations",
-                    status="SUCCESS",
-                    timestamp=timestamp_str
-                )
+            process_tool_execution(
+                "math-calculator",
+                "Computed sum totals and verified balance calculations"
+            )
+        if any(kw in msg_lower for kw in ["export", "excel", "sheet", "csv"]):
+            process_tool_execution(
+                "export-excel",
+                f"Exported Q3 statements database ledger to Excel sheet"
             )
             
     elif agent_id == "support-triage":
         if any(kw in msg_lower for kw in ["escalate", "urgent", "critical", "alert"]):
-            tool_calls.append(
-                ToolExecution(
-                    tool_name="escalate-ticket",
-                    action_taken="Flagged status to active paging alert for engineering",
-                    status="SUCCESS",
-                    timestamp=timestamp_str
-                )
+            process_tool_execution(
+                "escalate-ticket",
+                "Flagged status to active paging alert for engineering"
             )
         if any(kw in msg_lower for kw in ["create", "jira", "ticket", "bug", "task"]):
-            tool_calls.append(
-                ToolExecution(
-                    tool_name="create-jira-issue",
-                    action_taken=f"Created Jira Issue (NEX-{current_user.id[:4].upper()}) with high priority",
-                    status="SUCCESS",
-                    timestamp=timestamp_str
-                )
+            process_tool_execution(
+                "create-jira-issue",
+                f"Created Jira Issue (NEX-{current_user.id[:4].upper()}) with high priority"
             )
             
     # 3. Formulate persona completion
     system_prompt = (
         f"{agent['system_persona']}\n"
         "Ground your response strictly in the document context blocks below. "
-        "Explain any automated tools triggered at the end of the answer.\n\n"
+        "Explain any automated tools triggered or denied at the end of the answer.\n\n"
         f"Context information:\n{context_string}"
     )
     

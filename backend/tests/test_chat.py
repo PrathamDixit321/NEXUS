@@ -48,12 +48,14 @@ def test_chat_rag_pipeline_and_citations() -> None:
         # 2. Seed document and database chunks with unit vector embeddings
         db = SessionLocal()
         try:
+            user = db.query(User).filter(User.email == "tester@nexus.ai").first()
             doc = Document(
                 name="corporate_security.pdf",
                 collection="Security",
                 content_type="application/pdf",
                 size_bytes=1024,
                 storage_key="corp_security.pdf",
+                owner_id=user.id,
                 status="ready"
             )
             db.add(doc)

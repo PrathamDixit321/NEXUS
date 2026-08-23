@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    system_api_key: str = "nexus_secret_service_api_key_123"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -33,8 +33,22 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=False)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
-    """Dependency validator fetching the authenticated user from the request header."""
+def get_current_user(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> User:
+    """Dependency validator fetching the authenticated user from the request header (JWT or API Key)."""
+    from app.core.config import get_settings
+    settings = get_settings()
+
+    # Check for S2S System API Key (via Bearer token or custom header)
+    api_key_header = request.headers.get("x-api-key")
+    if (token == settings.system_api_key) or (api_key_header == settings.system_api_key):
+        admin_user = db.query(User).join(Role).filter(Role.name.in_(["Admin", "CEO"])).first()
+        if admin_user:
+            return admin_user
+
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired authentication credentials.",
