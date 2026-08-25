@@ -587,7 +587,9 @@ export function DocumentKnowledgeUI({ initialView }: { initialView: "knowledge" 
                             {document.type}
                           </span>
                           <div>
-                            <span className="font-medium text-slate-900">{document.name}</span>
+                            <Link href={`/documents/${document.id}`} className="font-medium text-slate-900 hover:text-indigo-600">
+                              {document.name}
+                            </Link>
                             <p className="mt-0.5 text-xs text-slate-400">
                               {document.owner} · {document.size} · Updated {document.updated}
                             </p>
