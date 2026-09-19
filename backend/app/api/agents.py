@@ -167,6 +167,7 @@ def run_agent(
                     citations.append(
                         CitationSource(
                             document_name=chunk.document.name,
+                            document_id=chunk.document.id,
                             page_number=chunk.page_number,
                             similarity=round(sim, 3)
                         )

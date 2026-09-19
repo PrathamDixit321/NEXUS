@@ -13,6 +13,7 @@ class ChatRequest(BaseModel):
 class CitationSource(BaseModel):
     """Schema representing a citation source document context block."""
     document_name: str
+    document_id: Optional[str] = None
     page_number: Optional[int]
     similarity: float
 

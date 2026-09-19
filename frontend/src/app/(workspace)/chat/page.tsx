@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/api";
 
 interface Citation {
   document_name: string;
+  document_id?: string;
   page_number: number | null;
   similarity: number;
 }
@@ -123,11 +124,10 @@ export default function ChatPage() {
               {isAssistant && message.citations && message.citations.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-2">
                   {message.citations.map((citation, idx) => {
-                    const docSlug = citation.document_name.toLowerCase().replaceAll(" ", "-");
                     return (
                       <Link
                         key={idx}
-                        href={`/documents/${docSlug}`}
+                        href={citation.document_id ? `/documents/${citation.document_id}` : "/documents"}
                         className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500 hover:border-indigo-500 hover:text-indigo-600 transition shadow-sm"
                       >
                         <span className="text-slate-400">📄</span>

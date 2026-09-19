@@ -22,6 +22,7 @@ interface ToolExecution {
 
 interface Citation {
   document_name: string;
+  document_id?: string;
   page_number: number | null;
   similarity: number;
 }
@@ -255,7 +256,7 @@ export default function AgentsPage() {
                       {message.citations.map((citation, idx) => (
                         <Link
                           key={idx}
-                          href={`/documents/${citation.document_name.toLowerCase().replaceAll(" ", "-")}`}
+                          href={citation.document_id ? `/documents/${citation.document_id}` : "/documents"}
                           className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[10px] text-slate-500 hover:border-indigo-500 hover:text-indigo-600 transition shadow-sm"
                         >
                           📄 {citation.document_name} {citation.page_number && `(p. ${citation.page_number})`}
