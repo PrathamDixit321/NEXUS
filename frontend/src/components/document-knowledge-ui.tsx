@@ -19,7 +19,26 @@ type Document = {
   default_access: string;
 };
 
-function toDocument(document: any): Document {
+type ApiDocument = {
+  id: string;
+  name: string;
+  collection: string;
+  updated_at: string;
+  owner: string;
+  owner_id: string | null;
+  status: string;
+  size_bytes: number;
+  classification?: string;
+  default_access?: string;
+};
+
+type DocumentPermissionGrant = {
+  subject_type: string;
+  subject_id: string;
+  permission_type: string;
+};
+
+function toDocument(document: ApiDocument): Document {
   const extension = document.name.split(".").pop()?.toUpperCase() ?? "FILE";
   return {
     id: document.id,
@@ -62,7 +81,7 @@ export function DocumentKnowledgeUI({ initialView }: { initialView: "knowledge" 
 
   // Manage Access States
   const [managingDoc, setManagingDoc] = useState<Document | null>(null);
-  const [permissionsList, setPermissionsList] = useState<any[]>([]);
+  const [permissionsList, setPermissionsList] = useState<DocumentPermissionGrant[]>([]);
   const [mgmtAccess, setMgmtAccess] = useState("ORGANIZATION");
   const [mgmtClassification, setMgmtClassification] = useState("INTERNAL");
   const [newSubjectType, setNewSubjectType] = useState("USER");

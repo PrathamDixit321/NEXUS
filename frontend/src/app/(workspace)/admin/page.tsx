@@ -65,27 +65,6 @@ export default function AdminPage() {
     }
   }, [user]);
 
-  // Authorization Check
-  if (user?.role !== "Admin" && user?.role !== "CEO") {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <span className="grid h-16 w-16 place-items-center rounded-full bg-rose-50 text-2xl text-rose-600 shadow-sm border border-rose-100">
-          ⚠️
-        </span>
-        <h2 className="mt-6 text-xl font-semibold text-slate-900">Access Denied</h2>
-        <p className="mt-2 max-w-sm text-sm text-slate-500">
-          You do not have administrative privileges. Admin or Executive rights are required to view this area.
-        </p>
-        <Link
-          href="/dashboard"
-          className="mt-8 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition"
-        >
-          Go back to Dashboard
-        </Link>
-      </div>
-    );
-  }
-
   // Filter logs locally based on selected filters
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -119,6 +98,27 @@ export default function AdminPage() {
 
   const handlePrevPage = () => setCurrentPage((p) => Math.max(p - 1, 1));
   const handleNextPage = () => setCurrentPage((p) => Math.min(p + 1, totalPages));
+
+  // Authorization Check
+  if (user?.role !== "Admin" && user?.role !== "CEO") {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <span className="grid h-16 w-16 place-items-center rounded-full bg-rose-50 text-2xl text-rose-600 shadow-sm border border-rose-100">
+          ⚠️
+        </span>
+        <h2 className="mt-6 text-xl font-semibold text-slate-900">Access Denied</h2>
+        <p className="mt-2 max-w-sm text-sm text-slate-500">
+          You do not have administrative privileges. Admin or Executive rights are required to view this area.
+        </p>
+        <Link
+          href="/dashboard"
+          className="mt-8 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition"
+        >
+          Go back to Dashboard
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <section className="space-y-6">

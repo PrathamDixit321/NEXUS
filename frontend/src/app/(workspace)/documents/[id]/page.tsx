@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
-import { useAuth } from "@/context/auth-context";
 
 type Document = {
   id: string;
@@ -28,8 +27,6 @@ type Chunk = {
 
 export default function DocumentDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
-  const { user } = useAuth();
 
   const [document, setDocument] = useState<Document | null>(null);
   const [chunks, setChunks] = useState<Chunk[]>([]);
