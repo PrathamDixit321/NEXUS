@@ -14,9 +14,13 @@ from app.api.auth import router as auth_router
 from app.api.chat import router as chat_router
 from app.api.agents import router as agents_router
 from app.api.admin import router as admin_router
+from app.api.tasks import router as tasks_router
+from app.api.reports import router as reports_router
+from app.api.analytics import router as analytics_router
 from app.db.database import Base, engine, SessionLocal
 from app.models.document import Document  # noqa: F401 - registers the table with SQLAlchemy
 from app.models.auth import User, Role, Permission, UserSession, AuditLog  # noqa: F401 - registers auth tables
+from app.models.operations import Task, Report  # noqa: F401 - registers operations tables
 from app.db.seed import seed_roles_and_permissions
 
 
@@ -53,6 +57,9 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(agents_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(tasks_router, prefix="/api/v1")
+app.include_router(reports_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])

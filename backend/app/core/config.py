@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
     system_api_key: str = "nexus_secret_service_api_key_123"
 
+    # Production Vector Database Configuration (Supports 'sqlite' or 'qdrant')
+    vector_store_type: str = "sqlite"
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    qdrant_collection_name: str = "nexus_knowledge"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

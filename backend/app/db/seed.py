@@ -1,8 +1,11 @@
 """Database seeding logic for setting up initial roles, permissions, departments, teams, and user hierarchy."""
 
+import json
 import logging
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.models.auth import Role, Permission, Department, Team, User
+from app.models.operations import Task, Report
 from app.core.security import get_password_hash
 
 logger = logging.getLogger("nexusai")
@@ -263,8 +266,119 @@ def seed_roles_and_permissions(db: Session) -> None:
                     user.manager_id = manager.id
                     db.add(user)
 
+        # Seed Operational Tasks
+        admin_user = user_objects.get("ceo@nexus.ai")
+        tasks_data = [
+            {
+                "title": "Review Executive Q3 Access Audit",
+                "description": "Review quarterly document access patterns, blocked privilege escalations, and audit trace logs.",
+                "status": "IN_PROGRESS",
+                "priority": "HIGH",
+                "assigned_email": "eng.manager@nexus.ai",
+                "days_due": 1,
+                "resource_type": "AUDIT",
+            },
+            {
+                "title": "Approve HR Leave Workflow Schema",
+                "description": "Validate n8n integration parameters for automated leave balance synchronization.",
+                "status": "TODO",
+                "priority": "MEDIUM",
+                "assigned_email": "hr.manager@nexus.ai",
+                "days_due": 2,
+                "resource_type": "WORKFLOW",
+            },
+            {
+                "title": "Audit Restricted Financial Ledger Access",
+                "description": "Verify employee clearances on confidential Q3 finance budget spreadsheets.",
+                "status": "TODO",
+                "priority": "URGENT",
+                "assigned_email": "finance.manager@nexus.ai",
+                "days_due": 0,
+                "resource_type": "DOCUMENT",
+            },
+            {
+                "title": "Update Department Knowledge Base",
+                "description": "Re-index engineering architecture guides and system blueprint documents.",
+                "status": "DONE",
+                "priority": "LOW",
+                "assigned_email": "eng.lead@nexus.ai",
+                "days_due": -2,
+                "resource_type": "DOCUMENT",
+            },
+        ]
+
+        for t in tasks_data:
+            existing_task = db.query(Task).filter(Task.title == t["title"]).first()
+            if not existing_task:
+                assigned_user = user_objects.get(t["assigned_email"])
+                due = datetime.utcnow() + timedelta(days=t["days_due"])
+                task = Task(
+                    title=t["title"],
+                    description=t["description"],
+                    status=t["status"],
+                    priority=t["priority"],
+                    assigned_to_id=assigned_user.id if assigned_user else None,
+                    created_by_id=admin_user.id if admin_user else None,
+                    due_date=due,
+                    related_resource_type=t["resource_type"],
+                )
+                db.add(task)
+
+        # Seed Operational Reports
+        reports_data = [
+            {
+                "title": "Q3 Workspace Compliance & Security Audit",
+                "description": "Full organizational audit of document permissions, unauthorized access blocks, and role changes.",
+                "report_type": "COMPLIANCE_AUDIT",
+                "status": "PUBLISHED",
+                "content": json.dumps({
+                    "summary": "Audited 1,450 operations across 6 departments. Zero unauthorized privilege escalations detected.",
+                    "access_governance_score": 98.4,
+                    "blocked_attempts_count": 14,
+                    "top_accessed_collections": ["Engineering", "Product", "People & policies"],
+                    "recommendation": "Rotate n8n service API keys every 90 days and verify employee-to-manager inheritance."
+                }),
+            },
+            {
+                "title": "Executive Document Intelligence Summary",
+                "description": "Consolidated overview of knowledge base growth, ingestion throughput, and RAG query response health.",
+                "report_type": "EXECUTIVE_SUMMARY",
+                "status": "PUBLISHED",
+                "content": json.dumps({
+                    "summary": "Knowledge base ingestion grew by 24% month-over-month. Average vector retrieval latency is 18ms.",
+                    "total_documents_ingested": 18,
+                    "avg_rag_relevance_score": 0.89,
+                    "recommendation": "Expand automated OCR ingestion to support multi-page scanned financial statements."
+                }),
+            },
+            {
+                "title": "Access Control Matrix Review",
+                "description": "Periodic evaluation of department-scoped permissions and private sharing grants.",
+                "report_type": "ACCESS_CONTROL",
+                "status": "DRAFT",
+                "content": json.dumps({
+                    "summary": "Draft review identifying 3 documents with legacy organization-wide sharing.",
+                    "flagged_documents_count": 3,
+                    "recommendation": "Restrict legacy HR salary documents from ORGANIZATION to DEPARTMENT visibility."
+                }),
+            },
+        ]
+
+        for r in reports_data:
+            existing_rep = db.query(Report).filter(Report.title == r["title"]).first()
+            if not existing_rep:
+                report = Report(
+                    title=r["title"],
+                    description=r["description"],
+                    report_type=r["report_type"],
+                    status=r["status"],
+                    generated_by_id=admin_user.id if admin_user else None,
+                    content=r["content"],
+                )
+                db.add(report)
+
         db.commit()
-        logger.info("Database seeding of roles, departments, teams, and hierarchical users completed successfully.")
+        logger.info("Database seeding of roles, departments, teams, users, tasks, and reports completed successfully.")
     except Exception as e:
         db.rollback()
         logger.error(f"Error seeding default database entities: {str(e)}")

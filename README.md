@@ -21,15 +21,17 @@ Organizations often keep policies, reports, documents, workflows, and AI tools i
 
 | Module | Purpose | Status |
 | --- | --- | --- |
-| Workspace UI | Landing page, navigation, dashboard, settings, admin area | Available with demo data |
-| Enterprise AI Chat | Ask questions across company knowledge | UI preview |
-| Knowledge & Documents | Organize and process internal sources | UI preview |
-| Authentication & RBAC | Secure identity, roles, and protected routes | Planned |
-| Document Intelligence | Upload, extract, chunk, embed, and index files | Planned |
-| RAG | Grounded answers with citations and safeguards | Planned |
-| AI Agents | Role-specific assistants and tool calling | Planned |
-| Automation | Secure n8n webhook integration and workflow monitoring | Planned |
-| Analytics & Reports | KPI views, insights, and executive reporting | UI preview |
+| Workspace UI | Landing page, navigation, dashboard, settings, admin area | Complete |
+| Enterprise AI Chat | Ask questions across company knowledge | Complete |
+| Knowledge & Documents | Organize and process internal sources with access control | Complete |
+| Authentication & RBAC/ABAC | Secure identity, roles, sharing authority, and protected routes | Complete |
+| Document Intelligence | Upload, extract, chunk, embed, and index files | Complete |
+| Vector Database | Pluggable store abstraction supporting Qdrant & SQLite | Complete |
+| RAG | Grounded answers with citations and security pre-filtering | Complete |
+| AI Agents | Role-specific assistants and guarded tool calling | Complete |
+| Operations Suite | Live Analytics KPIs, Reports synthesis, and Tasks queue | Complete |
+| Compliance Audits | Real-time security access auditing and trace logging | Complete |
+| Automation | Secure S2S API key authentication and workflow monitoring | Active Foundation |
 
 ## Architecture
 

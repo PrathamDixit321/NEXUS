@@ -164,6 +164,26 @@ def process_document_background(document_id: str) -> None:
             document.status = "ready"
             db.commit()
             logger.info(f"Finished processing document {document_id}: generated {chunk_idx} chunks")
+
+            # Index chunks in production vector database store
+            try:
+                from app.services.vector_store import get_vector_store, VectorChunk
+                v_chunks = [
+                    VectorChunk(
+                        id=f"{document.id}-{c.chunk_index}",
+                        document_id=document.id,
+                        chunk_index=c.chunk_index,
+                        content=c.content,
+                        page_number=c.page_number,
+                        collection=document.collection,
+                        document_name=document.name,
+                        vector=json.loads(c.embedding_json),
+                    )
+                    for c in db_chunks
+                ]
+                get_vector_store().upsert(v_chunks)
+            except Exception as ve:
+                logger.warning(f"Vector store indexing notice for doc {document.id}: {ve}")
         except Exception as e:
             logger.exception(f"Failed background processing for document {document_id}: {e}")
             try:

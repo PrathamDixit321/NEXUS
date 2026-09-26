@@ -83,43 +83,30 @@ def query_assistant(
                 citations=[]
             )
 
-        # 3. Retrieve chunks only belonging to authorized documents
-        statement = select(DocumentChunk).where(DocumentChunk.document_id.in_(authorized_doc_ids))
-        chunks = db.scalars(statement).all()
-        
-        # 4. Calculate cosine similarity
-        scored_chunks = []
-        for chunk in chunks:
-            if not chunk.embedding_json:
-                continue
-            try:
-                chunk_vector = json.loads(chunk.embedding_json)
-                sim = cosine_similarity(query_vector, chunk_vector)
-                scored_chunks.append((chunk, sim))
-            except Exception as e:
-                logger.error(f"Error parsing embedding for chunk {chunk.id}: {e}")
-                
-        # 5. Sort and select top chunks (k=4)
-        scored_chunks.sort(key=lambda x: x[1], reverse=True)
-        top_chunks = scored_chunks[:4]
-        
-        # 6. Build context prompt blocks
+        # 3. Retrieve chunks using production vector store with strict RBAC pre-filtering
+        from app.services.vector_store import get_vector_store
+        vector_hits = get_vector_store().search(
+            query_vector=query_vector,
+            authorized_doc_ids=authorized_doc_ids,
+            limit=4,
+            db=db,
+        )
+
+        # 4. Build context prompt blocks & citations
         context_blocks = []
         citations = []
-        
-        for chunk, sim in top_chunks:
-            # Only include chunks that have a minimal positive similarity
-            if sim > 0.05:
-                context_blocks.append(f"[Source: {chunk.document.name} (Page {chunk.page_number})]\n{chunk.content}")
-                citations.append(
-                    CitationSource(
-                        document_name=chunk.document.name,
-                        document_id=chunk.document.id,
-                        page_number=chunk.page_number,
-                        similarity=round(sim, 3)
-                    )
+
+        for hit in vector_hits:
+            context_blocks.append(f"[Source: {hit.document_name} (Page {hit.page_number})]\n{hit.content}")
+            citations.append(
+                CitationSource(
+                    document_name=hit.document_name,
+                    document_id=hit.document_id,
+                    page_number=hit.page_number,
+                    similarity=hit.similarity,
                 )
-                
+            )
+
         context_string = "\n\n---\n\n".join(context_blocks)
 
         # Log audit log compliance trace for RAG retrieval

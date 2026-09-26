@@ -24,8 +24,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core.config import get_settings
 from app.db.database import Base
 # Make sure all models are imported so SQLAlchemy registers them with metadata
-from app.models.document import Document, DocumentChunk  # noqa: F401
-from app.models.auth import User, Role, Permission, UserSession, AuditLog  # noqa: F401
+from app.models.document import Document, DocumentChunk, DocumentPermission  # noqa: F401
+from app.models.auth import User, Role, Permission, role_permissions, Department, Team, UserSession, AuditLog  # noqa: F401
+from app.models.operations import Task, Report  # noqa: F401
 
 settings = get_settings()
 target_metadata = Base.metadata
