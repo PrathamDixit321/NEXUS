@@ -58,17 +58,73 @@ AGENT_PROFILES: Dict[str, dict] = {
             "You are the Nexus Support Triage Agent. You organize customer tickets, clarify bugs, "
             "and escalate operational issues. Be direct, task-oriented, and structure requests clearly."
         )
+    },
+    "compliance-officer": {
+        "id": "compliance-officer",
+        "name": "Security Compliance Officer",
+        "description": "Monitors access matrices, audits permission anomalies, and detects unauthorized data escalation.",
+        "collection_bind": "All",
+        "status": "Active",
+        "allowed_tools": ["scan-access-matrix", "flag-security-breach", "revoke-unauthorized-grant"],
+        "system_persona": (
+            "You are the Nexus Security Compliance Officer. You audit enterprise access control matrices, "
+            "detect data leakage risks, verify role-based permissions, and enforce SOC2/ISO compliance standards. "
+            "Be analytical, firm, objective, and reference relevant compliance frameworks."
+        )
+    },
+    "document-classifier": {
+        "id": "document-classifier",
+        "name": "Document Intelligence & PII Redactor",
+        "description": "Scans files for PII leaks, recommends classification tags, and assigns collection bindings.",
+        "collection_bind": "Engineering",
+        "status": "Active",
+        "allowed_tools": ["detect-pii", "auto-classify-document", "assign-collection-bind"],
+        "system_persona": (
+            "You are the Nexus Document Intelligence & PII Redactor. You inspect documents for sensitive "
+            "information (PII, credentials, financial details), recommend appropriate classification labels "
+            "(PUBLIC, INTERNAL, CONFIDENTIAL, RESTRICTED), and route files to correct organizational collections. "
+            "Be precise, privacy-conscious, and protective of enterprise data."
+        )
+    },
+    "executive-ops": {
+        "id": "executive-ops",
+        "name": "Executive Operations & Strategy Agent",
+        "description": "Synthesizes cross-department summaries, tracks operational bottlenecks, and drafts executive briefings.",
+        "collection_bind": "All",
+        "status": "Active",
+        "allowed_tools": ["generate-executive-report", "create-operational-task", "broadcast-executive-brief"],
+        "system_persona": (
+            "You are the Nexus Executive Operations & Strategy Agent. You serve company leadership by "
+            "synthesizing operational metrics across HR, Engineering, Support, and Finance, tracking strategic "
+            "milestones, identifying task bottlenecks, and drafting executive briefings. "
+            "Be concise, strategic, results-driven, and focused on business impact."
+        )
     }
 }
 
 # Deterministic tool access permissions mapping (Security Guard Layer)
 ALLOWED_ROLES_FOR_TOOLS = {
+    # HR Tools
     "notify-hr-team": {"Admin", "CEO", "HR Manager", "HR Staff", "Employee"},
-    "export-excel": {"Admin", "CEO", "Finance Manager", "Finance Staff"},
-    "escalate-ticket": {"Admin", "CEO", "Manager", "Team Lead", "HR Manager", "Finance Manager"},
     "generate-leave-form": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"},
+    # Finance Tools
+    "export-excel": {"Admin", "CEO", "Finance Manager", "Finance Staff"},
     "math-calculator": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"},
-    "create-jira-issue": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"}
+    # Support Tools
+    "escalate-ticket": {"Admin", "CEO", "Manager", "Team Lead", "HR Manager", "Finance Manager"},
+    "create-jira-issue": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"},
+    # Security Compliance Tools
+    "scan-access-matrix": {"Admin", "CEO", "Manager"},
+    "flag-security-breach": {"Admin", "CEO", "Manager"},
+    "revoke-unauthorized-grant": {"Admin", "CEO"},
+    # Document Intelligence & PII Tools
+    "detect-pii": {"Admin", "CEO", "Manager", "Team Lead", "Employee", "HR Manager", "HR Staff", "Finance Manager", "Finance Staff"},
+    "auto-classify-document": {"Admin", "CEO", "Manager", "Team Lead", "HR Manager", "Finance Manager"},
+    "assign-collection-bind": {"Admin", "CEO", "Manager", "Team Lead", "HR Manager", "Finance Manager"},
+    # Executive Operations Tools
+    "generate-executive-report": {"Admin", "CEO", "Manager"},
+    "create-operational-task": {"Admin", "CEO", "Manager", "Team Lead", "HR Manager", "Finance Manager"},
+    "broadcast-executive-brief": {"Admin", "CEO"},
 }
 
 
@@ -140,16 +196,18 @@ def run_agent(
 
             doc_stmt = select(Document.id).where(or_(*filter_conds))
 
-        # Filter by Agent collection bind
-        doc_stmt = doc_stmt.where(Document.collection == agent["collection_bind"])
+        # Filter by Agent collection bind if specific
+        if agent["collection_bind"] != "All":
+            doc_stmt = doc_stmt.where(Document.collection == agent["collection_bind"])
         authorized_doc_ids = db.scalars(doc_stmt).all()
 
         if authorized_doc_ids:
             from app.services.vector_store import get_vector_store
+            collection_filter = None if agent["collection_bind"] == "All" else agent["collection_bind"]
             vector_hits = get_vector_store().search(
                 query_vector=query_vector,
                 authorized_doc_ids=authorized_doc_ids,
-                collection=agent["collection_bind"],
+                collection=collection_filter,
                 limit=3,
                 db=db,
             )
@@ -256,6 +314,57 @@ def run_agent(
             process_tool_execution(
                 "create-jira-issue",
                 f"Created Jira Issue (NEX-{current_user.id[:4].upper()}) with high priority"
+            )
+
+    elif agent_id == "compliance-officer":
+        if any(kw in msg_lower for kw in ["scan", "audit", "matrix", "check", "inspect", "review"]):
+            process_tool_execution(
+                "scan-access-matrix",
+                "Scanned enterprise access matrix: verified clearance tiers across documents, verified explicit subject grants, and confirmed zero overshared files."
+            )
+        if any(kw in msg_lower for kw in ["breach", "escalat", "violat", "alert", "threat", "idor"]):
+            process_tool_execution(
+                "flag-security-breach",
+                "Flagged high-priority security breach event for InfoSec review: analyzed blocked permission denials and logged incident report."
+            )
+        if any(kw in msg_lower for kw in ["revoke", "remove grant", "block", "deny access", "strip"]):
+            process_tool_execution(
+                "revoke-unauthorized-grant",
+                "Revoked unauthorized document grant and updated explicit permission matrix to least-privilege state."
+            )
+
+    elif agent_id == "document-classifier":
+        if any(kw in msg_lower for kw in ["pii", "sensitive", "mask", "leak", "ssn", "credit", "redact", "privacy"]):
+            process_tool_execution(
+                "detect-pii",
+                "Completed automated PII scan: checked for email patterns, SSN/card numbers, and verified data masking thresholds."
+            )
+        if any(kw in msg_lower for kw in ["classify", "tier", "tag", "confidential", "restricted", "label"]):
+            process_tool_execution(
+                "auto-classify-document",
+                "Assigned document classification tier based on content sensitivity and corporate data protection guidelines."
+            )
+        if any(kw in msg_lower for kw in ["collection", "assign", "bind", "route", "folder", "organize"]):
+            process_tool_execution(
+                "assign-collection-bind",
+                "Mapped document binding to target domain collection and configured default inheritance policy."
+            )
+
+    elif agent_id == "executive-ops":
+        if any(kw in msg_lower for kw in ["report", "brief", "summary", "quarter", "kpi", "executive", "overview"]):
+            process_tool_execution(
+                "generate-executive-report",
+                "Synthesized live cross-department executive briefing incorporating knowledge ingestion and operational KPIs."
+            )
+        if any(kw in msg_lower for kw in ["task", "assign", "followup", "action item", "todo", "bottleneck"]):
+            process_tool_execution(
+                "create-operational-task",
+                "Created high-priority operational task in workspace queue for leadership follow-up."
+            )
+        if any(kw in msg_lower for kw in ["broadcast", "notify exec", "board", "alert leadership", "share brief"]):
+            process_tool_execution(
+                "broadcast-executive-brief",
+                "Broadcast executive operations briefing to executive dashboard and leadership channels."
             )
             
     # 3. Formulate persona completion

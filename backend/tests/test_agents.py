@@ -45,10 +45,14 @@ def test_agent_profiles_and_execution_pipeline() -> None:
         list_res = client.get("/api/v1/agents", headers=headers)
         assert list_res.status_code == 200
         agents = list_res.json()
-        assert len(agents) == 3
+        assert len(agents) == 6
         agent_names = [a["name"] for a in agents]
         assert "HR Policy Assistant" in agent_names
         assert "Finance Analyst" in agent_names
+        assert "Support Triage Agent" in agent_names
+        assert "Security Compliance Officer" in agent_names
+        assert "Document Intelligence & PII Redactor" in agent_names
+        assert "Executive Operations & Strategy Agent" in agent_names
         
         # 3. Execute query on HR Policy Assistant triggering leave tools
         query_vector = [0.0] * 768
@@ -88,3 +92,47 @@ def test_agent_profiles_and_execution_pipeline() -> None:
             f_data = finance_res.json()
             f_tools = [t["tool_name"] for t in f_data["tool_calls"]]
             assert "math-calculator" in f_tools
+
+        # 5. Execute query on Security Compliance Officer (testing security guard DENIAL for standard employee)
+        with patch("app.api.agents.get_embedding", return_value=query_vector), \
+             patch("app.api.agents.generate_completion", return_value="Compliance audit finished."):
+                 
+            sec_payload = {
+                "message": "Audit the access matrix and revoke unauthorized grant on this file."
+            }
+            sec_res = client.post("/api/v1/agents/compliance-officer/run", json=sec_payload, headers=headers)
+            assert sec_res.status_code == 200
+            s_data = sec_res.json()
+            s_tools = {t["tool_name"]: t["status"] for t in s_data["tool_calls"]}
+            # Standard employee is allowed to run scan-access-matrix if role permitted or denied, but revoke is strictly Admin/CEO
+            assert "revoke-unauthorized-grant" in s_tools
+            assert s_tools["revoke-unauthorized-grant"] == "DENIED"
+
+        # 6. Execute query on Document Intelligence & PII Redactor
+        with patch("app.api.agents.get_embedding", return_value=query_vector), \
+             patch("app.api.agents.generate_completion", return_value="PII scan and classification completed."):
+                 
+            doc_payload = {
+                "message": "Scan this document for sensitive pii leaks and auto classify tier."
+            }
+            doc_res = client.post("/api/v1/agents/document-classifier/run", json=doc_payload, headers=headers)
+            assert doc_res.status_code == 200
+            d_data = doc_res.json()
+            d_tools = [t["tool_name"] for t in d_data["tool_calls"]]
+            assert "detect-pii" in d_tools
+            assert "auto-classify-document" in d_tools
+
+        # 7. Execute query on Executive Operations Agent
+        with patch("app.api.agents.get_embedding", return_value=query_vector), \
+             patch("app.api.agents.generate_completion", return_value="Executive briefing ready."):
+                 
+            exec_payload = {
+                "message": "Generate executive report summary and create operational task for follow up."
+            }
+            exec_res = client.post("/api/v1/agents/executive-ops/run", json=exec_payload, headers=headers)
+            assert exec_res.status_code == 200
+            e_data = exec_res.json()
+            e_tools = [t["tool_name"] for t in e_data["tool_calls"]]
+            assert "generate-executive-report" in e_tools
+            assert "create-operational-task" in e_tools
+
