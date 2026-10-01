@@ -107,6 +107,11 @@ class User(Base):
         """Expose department name as a dynamic string for backward compatibility."""
         return self.department_rel.name if self.department_rel else None
 
+    @property
+    def name(self) -> str:
+        """Alias full_name as name for cross-module compatibility."""
+        return self.full_name
+
 
 class UserSession(Base):
     """Session management database model to tracking refresh tokens and active user sign-ins."""

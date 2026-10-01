@@ -17,10 +17,12 @@ from app.api.admin import router as admin_router
 from app.api.tasks import router as tasks_router
 from app.api.reports import router as reports_router
 from app.api.analytics import router as analytics_router
+from app.api.automation import router as automation_router
 from app.db.database import Base, engine, SessionLocal
 from app.models.document import Document  # noqa: F401 - registers the table with SQLAlchemy
 from app.models.auth import User, Role, Permission, UserSession, AuditLog  # noqa: F401 - registers auth tables
 from app.models.operations import Task, Report  # noqa: F401 - registers operations tables
+from app.models.automation import Workflow, WorkflowRun, ApiKey  # noqa: F401 - registers automation tables
 from app.db.seed import seed_roles_and_permissions
 
 
@@ -49,7 +51,7 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-API-Key"],
 )
 
 app.include_router(documents_router, prefix="/api/v1")
@@ -60,6 +62,7 @@ app.include_router(admin_router, prefix="/api/v1")
 app.include_router(tasks_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(analytics_router, prefix="/api/v1")
+app.include_router(automation_router, prefix="/api/v1")
 
 
 @app.get("/health", tags=["System"])

@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from app.models.auth import Role, Permission, Department, Team, User
 from app.models.operations import Task, Report
+from app.models.automation import Workflow, WorkflowRun, ApiKey
+from app.services.automation_service import hash_api_key
 from app.core.security import get_password_hash
 
 logger = logging.getLogger("nexusai")
@@ -377,8 +379,133 @@ def seed_roles_and_permissions(db: Session) -> None:
                 )
                 db.add(report)
 
+        # Seed Automation Workflows
+        workflows_data = [
+            {
+                "title": "Email → Support Triage Ticket",
+                "description": "Ingest customer support inquiry emails, classify urgency with AI, and route tickets.",
+                "trigger_type": "WEBHOOK",
+                "webhook_slug": "whk_support_email_triage",
+                "status": "ACTIVE",
+                "action_type": "EXECUTE_AGENT_TASK",
+                "action_target": "support-triage",
+                "total_runs": 312,
+            },
+            {
+                "title": "Weekly Executive Brief Synthesizer",
+                "description": "Compile departmental analytics, document ingestion metrics, and compliance logs into an executive brief.",
+                "trigger_type": "SCHEDULE",
+                "webhook_slug": "whk_exec_brief_synth",
+                "status": "ACTIVE",
+                "action_type": "GENERATE_REPORT",
+                "action_target": "executive-ops",
+                "total_runs": 48,
+            },
+            {
+                "title": "Automated PII Redaction & Document Classifier",
+                "description": "Triggered upon new document uploads to scan for sensitive PII and auto-assign security clearance.",
+                "trigger_type": "DOCUMENT_UPLOAD",
+                "webhook_slug": "whk_pii_redaction_guard",
+                "status": "ACTIVE",
+                "action_type": "EXECUTE_AGENT_TASK",
+                "action_target": "document-classifier",
+                "total_runs": 124,
+            },
+            {
+                "title": "n8n Customer Onboarding Sync",
+                "description": "Synchronize employee workspace credentials and provision department access bundles via n8n.",
+                "trigger_type": "TRIGGER_N8N",
+                "webhook_slug": "whk_n8n_customer_sync",
+                "status": "ACTIVE",
+                "action_type": "TRIGGER_N8N",
+                "action_target": "https://n8n.internal.nexus/webhook/onboarding",
+                "total_runs": 96,
+            },
+            {
+                "title": "Security Access Violation Alert",
+                "description": "Notify security officer and create high-priority operational tasks when access is denied 3+ times.",
+                "trigger_type": "AGENT_ACTION",
+                "webhook_slug": "whk_sec_alert_manager",
+                "status": "ACTIVE",
+                "action_type": "NOTIFY_MANAGER",
+                "action_target": "compliance-officer",
+                "total_runs": 15,
+            },
+            {
+                "title": "Legacy Data Warehouse Ingestion",
+                "description": "Nightly batch synchronization with legacy PostgreSQL analytical tables.",
+                "trigger_type": "SCHEDULE",
+                "webhook_slug": "whk_legacy_warehouse_sync",
+                "status": "PAUSED",
+                "action_type": "SYNC_EXTERNAL_CRM",
+                "action_target": "PostgreSQL-DWH",
+                "total_runs": 22,
+            },
+        ]
+
+        seeded_workflows = []
+        for wf_data in workflows_data:
+            existing_wf = db.query(Workflow).filter(Workflow.title == wf_data["title"]).first()
+            if not existing_wf:
+                wf = Workflow(
+                    title=wf_data["title"],
+                    description=wf_data["description"],
+                    trigger_type=wf_data["trigger_type"],
+                    webhook_slug=wf_data["webhook_slug"],
+                    status=wf_data["status"],
+                    action_type=wf_data["action_type"],
+                    action_target=wf_data["action_target"],
+                    total_runs=wf_data["total_runs"],
+                    created_by_id=admin_user.id if admin_user else None,
+                )
+                db.add(wf)
+                db.flush()
+                seeded_workflows.append(wf)
+            else:
+                seeded_workflows.append(existing_wf)
+
+        # Seed initial execution runs
+        if seeded_workflows:
+            first_wf = seeded_workflows[0]
+            existing_run = db.query(WorkflowRun).filter(WorkflowRun.workflow_id == first_wf.id).first()
+            if not existing_run:
+                run1 = WorkflowRun(
+                    workflow_id=first_wf.id,
+                    status="SUCCESS",
+                    triggered_by="Webhook (n8n Engine)",
+                    trigger_source="WEBHOOK",
+                    execution_duration_ms=48,
+                    payload_summary=json.dumps({"ticket_id": "TICK-4921", "customer": "Acme Corp", "priority": "P1"}),
+                    logs=f"Pipeline '{first_wf.title}' dispatched to support-triage.\nAgent classified urgency as P1.\nRouting ticket to tier-2 on-call engineer.\nOutcome: Success.",
+                )
+                run2 = WorkflowRun(
+                    workflow_id=first_wf.id,
+                    status="SUCCESS",
+                    triggered_by="admin@nexus.ai",
+                    trigger_source="MANUAL",
+                    execution_duration_ms=62,
+                    payload_summary=json.dumps({"test_run": True, "initiated_by": "Administrator"}),
+                    logs="Manual test execution triggered via Workspace UI.\nAll validation checks passed.",
+                )
+                db.add_all([run1, run2])
+
+        # Seed S2S API Key for n8n
+        existing_key = db.query(ApiKey).filter(ApiKey.name == "n8n Production Integration").first()
+        if not existing_key:
+            demo_raw_key = "nx_live_n8n_prod_secret_integration_token_99x"
+            demo_hashed = hash_api_key(demo_raw_key)
+            api_key = ApiKey(
+                name="n8n Production Integration",
+                key_prefix="nx_live_n8n_...",
+                hashed_key=demo_hashed,
+                role="Admin",
+                is_active=True,
+                created_by_id=admin_user.id if admin_user else None,
+            )
+            db.add(api_key)
+
         db.commit()
-        logger.info("Database seeding of roles, departments, teams, users, tasks, and reports completed successfully.")
+        logger.info("Database seeding of roles, departments, teams, users, tasks, reports, and workflows completed successfully.")
     except Exception as e:
         db.rollback()
         logger.error(f"Error seeding default database entities: {str(e)}")

@@ -31,7 +31,7 @@ Organizations often keep policies, reports, documents, workflows, and AI tools i
 | AI Agents | Role-specific assistants and guarded tool calling | Complete |
 | Operations Suite | Live Analytics KPIs, Reports synthesis, and Tasks queue | Complete |
 | Compliance Audits | Real-time security access auditing and trace logging | Complete |
-| Automation | Secure S2S API key authentication and workflow monitoring | Active Foundation |
+| Automation Hub | Event triggers, n8n webhooks, S2S API keys, and execution traces | Complete |
 
 ## Architecture
 
