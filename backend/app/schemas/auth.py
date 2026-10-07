@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class UserRegisterRequest(BaseModel):
@@ -27,6 +27,12 @@ class UserUpdateRequest(BaseModel):
     company_name: Optional[str] = Field(None, max_length=100, description="Updated company name")
 
 
+class PasswordChangeRequest(BaseModel):
+    """Payload schema required for changing the user password."""
+    current_password: str = Field(..., description="Current password for verification")
+    new_password: str = Field(..., min_length=8, description="New secure password")
+
+
 class UserResponse(BaseModel):
     """Response schema containing user profile data."""
     id: str
@@ -38,8 +44,7 @@ class UserResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TokenResponse(BaseModel):
@@ -53,6 +58,16 @@ class TokenResponse(BaseModel):
 class TokenRefreshRequest(BaseModel):
     """Payload schema containing the refresh token to renew credentials."""
     refresh_token: str = Field(..., description="Active session refresh token")
+
+
+class UserSessionResponse(BaseModel):
+    """Response schema representing an active user login session."""
+    id: str
+    created_at: datetime
+    expires_at: datetime
+    is_revoked: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AuditLogResponse(BaseModel):
@@ -70,5 +85,4 @@ class AuditLogResponse(BaseModel):
     user_agent: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

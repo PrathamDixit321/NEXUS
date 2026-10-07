@@ -181,3 +181,56 @@ def test_database_rbac_association_seeding() -> None:
             assert "chat:read" in employee_perms
         finally:
             db.close()
+
+
+def test_change_password_and_sessions() -> None:
+    """Verifies that changing password validates credentials and sessions can be listed and revoked."""
+    clear_db()
+    with TestClient(app) as client:
+        # Register user
+        reg_payload = {
+            "email": "passchange@nexus.ai",
+            "password": "initialpassword123",
+            "full_name": "Password User",
+            "department": "Security",
+        }
+        res = client.post("/api/v1/auth/register", json=reg_payload)
+        assert res.status_code == 201
+        token = res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Fail on wrong current password
+        bad_change = client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={"current_password": "wrongpassword", "new_password": "newsupersecret99"},
+        )
+        assert bad_change.status_code == 400
+
+        # 2. Succeed on correct current password
+        good_change = client.post(
+            "/api/v1/auth/change-password",
+            headers=headers,
+            json={"current_password": "initialpassword123", "new_password": "newsupersecret99"},
+        )
+        assert good_change.status_code == 200
+        assert good_change.json()["message"] == "Password updated successfully."
+
+        # 3. Verify new password allows login
+        login_res = client.post(
+            "/api/v1/auth/login",
+            json={"email": "passchange@nexus.ai", "password": "newsupersecret99"},
+        )
+        assert login_res.status_code == 200
+
+        # 4. List sessions
+        sessions_res = client.get("/api/v1/auth/sessions", headers=headers)
+        assert sessions_res.status_code == 200
+        sessions = sessions_res.json()
+        assert len(sessions) >= 1
+        session_id = sessions[0]["id"]
+
+        # 5. Revoke session
+        del_res = client.delete(f"/api/v1/auth/sessions/{session_id}", headers=headers)
+        assert del_res.status_code == 204
+

@@ -9,13 +9,15 @@ from sqlalchemy.orm import Session
 
 from app.core.security import get_password_hash, verify_password
 from app.db.database import get_db
-from app.models.auth import Role, User, Department
+from app.models.auth import Role, User, Department, UserSession
 from app.schemas.auth import (
+    PasswordChangeRequest,
     TokenRefreshRequest,
     TokenResponse,
     UserLoginRequest,
     UserRegisterRequest,
     UserResponse,
+    UserSessionResponse,
     UserUpdateRequest,
 )
 from app.services.auth_service import (
@@ -308,3 +310,74 @@ def update_profile(
         "is_active": current_user.is_active,
         "created_at": current_user.created_at
     }
+
+
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    payload: PasswordChangeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Verifies the user's current password and securely updates to the new password."""
+    if not verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password verification failed.",
+        )
+
+    current_user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+
+    log_auth_event(
+        db=db,
+        user_id=current_user.id,
+        action="user:password_changed",
+        result="SUCCESS",
+        details="User password updated securely.",
+    )
+
+    return {"message": "Password updated successfully."}
+
+
+@router.get("/sessions", response_model=list[UserSessionResponse])
+def get_user_sessions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns active login sessions for the authenticated user."""
+    sessions = (
+        db.query(UserSession)
+        .filter(UserSession.user_id == current_user.id, UserSession.is_revoked == False)
+        .order_by(UserSession.created_at.desc())
+        .all()
+    )
+    return sessions
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revokes a specific active session."""
+    session_obj = (
+        db.query(UserSession)
+        .filter(UserSession.id == session_id, UserSession.user_id == current_user.id)
+        .first()
+    )
+    if not session_obj:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    session_obj.is_revoked = True
+    db.commit()
+
+    log_auth_event(
+        db=db,
+        user_id=current_user.id,
+        action="user:session_revoked",
+        result="SUCCESS",
+        details=f"Revoked session {session_id}",
+    )
+    return None
+
