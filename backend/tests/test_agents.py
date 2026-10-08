@@ -136,3 +136,53 @@ def test_agent_profiles_and_execution_pipeline() -> None:
             assert "generate-executive-report" in e_tools
             assert "create-operational-task" in e_tools
 
+
+def test_agent_detail_endpoint() -> None:
+    """Verify GET /api/v1/agents/{agent_id} returns detailed profile, persona, tool security matrix, and handles 404/401."""
+    clear_db()
+
+    with TestClient(app) as client:
+        # 1. Unauthenticated request should fail
+        unauth_res = client.get("/api/v1/agents/hr-policy")
+        assert unauth_res.status_code == 401
+
+        # 2. Register test user
+        reg_payload = {
+            "email": "detail.tester@nexus.ai",
+            "password": "securepassword123",
+            "full_name": "Agent Inspector",
+            "department": "Engineering",
+            "company_name": "NexusAI Inc."
+        }
+        reg_res = client.post("/api/v1/auth/register", json=reg_payload)
+        assert reg_res.status_code == 201
+        token = reg_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 3. Request valid agent details: hr-policy
+        res = client.get("/api/v1/agents/hr-policy", headers=headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["id"] == "hr-policy"
+        assert data["name"] == "HR Policy Assistant"
+        assert data["collection_bind"] == "HR"
+        assert "Nexus HR Policy Assistant" in data["system_persona"]
+        assert "notify-hr-team" in data["allowed_tools"]
+        assert "notify-hr-team" in data["tool_security_matrix"]
+        assert "generate-leave-form" in data["tool_security_matrix"]
+        assert isinstance(data["bound_documents"], list)
+
+        # 4. Request compliance-officer details and check security clearance matrix
+        comp_res = client.get("/api/v1/agents/compliance-officer", headers=headers)
+        assert comp_res.status_code == 200
+        comp_data = comp_res.json()
+        assert comp_data["id"] == "compliance-officer"
+        assert "revoke-unauthorized-grant" in comp_data["tool_security_matrix"]
+        assert sorted(comp_data["tool_security_matrix"]["revoke-unauthorized-grant"]) == ["Admin", "CEO"]
+
+        # 5. Non-existent agent ID returns 404
+        nf_res = client.get("/api/v1/agents/non-existent-agent-id", headers=headers)
+        assert nf_res.status_code == 404
+        assert "not found" in nf_res.json()["detail"].lower()
+
+

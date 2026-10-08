@@ -35,65 +35,7 @@ interface Message {
   citations?: Citation[];
 }
 
-const AGENT_META: Record<string, { icon: string; category: string; color: string; samplePrompts: string[] }> = {
-  "hr-policy": {
-    icon: "👥",
-    category: "People Operations",
-    color: "from-blue-500/10 to-indigo-500/10 border-indigo-200",
-    samplePrompts: [
-      "I want to submit a leave request for next week, notify HR.",
-      "What is the company vacation and sick leave policy?",
-    ],
-  },
-  "finance-analyst": {
-    icon: "📊",
-    category: "Finance & Accounting",
-    color: "from-emerald-500/10 to-teal-500/10 border-emerald-200",
-    samplePrompts: [
-      "Please calculate the total sum of this quarter's expenses.",
-      "Export Q3 financial statements ledger to Excel.",
-    ],
-  },
-  "support-triage": {
-    icon: "🛠️",
-    category: "Customer Support & IT",
-    color: "from-amber-500/10 to-orange-500/10 border-amber-200",
-    samplePrompts: [
-      "Escalate critical database outage to on-call engineering.",
-      "Create high priority Jira bug ticket for API latency spike.",
-    ],
-  },
-  "compliance-officer": {
-    icon: "🛡️",
-    category: "Information Security",
-    color: "from-rose-500/10 to-pink-500/10 border-rose-200",
-    samplePrompts: [
-      "Scan the enterprise access matrix and check for unclassified documents.",
-      "Flag security breach incident for blocked unauthorized access attempt.",
-      "Revoke unauthorized grant on restricted confidential files.",
-    ],
-  },
-  "document-classifier": {
-    icon: "📑",
-    category: "Data Ingestion & Privacy",
-    color: "from-cyan-500/10 to-sky-500/10 border-cyan-200",
-    samplePrompts: [
-      "Scan text for sensitive PII leaks like social security and card numbers.",
-      "Auto classify document tier based on sensitivity guidelines.",
-      "Assign collection bind and set department inheritance policy.",
-    ],
-  },
-  "executive-ops": {
-    icon: "⚡",
-    category: "Executive Strategy",
-    color: "from-violet-500/10 to-purple-500/10 border-violet-200",
-    samplePrompts: [
-      "Generate executive report summary of cross-department operations.",
-      "Create high-priority operational task to resolve workflow bottleneck.",
-      "Broadcast executive brief to board and leadership dashboard.",
-    ],
-  },
-};
+import { AGENT_META } from "@/lib/agents-meta";
 
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -273,12 +215,21 @@ export default function AgentsPage() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleSelectAgent(agent)}
-                  className="mt-6 w-full rounded-xl bg-slate-900 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 transition active:scale-95"
-                >
-                  Run Agent Workflow →
-                </button>
+                <div className="mt-6 flex items-center gap-2">
+                  <button
+                    onClick={() => handleSelectAgent(agent)}
+                    className="flex-1 rounded-xl bg-slate-900 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-600 transition active:scale-95 text-center"
+                  >
+                    Quick Chat →
+                  </button>
+                  <Link
+                    href={`/agents/${agent.id}`}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50/20 transition shadow-2xs text-center"
+                    title="Inspect agent persona, bound knowledge, and security clearance matrix"
+                  >
+                    Inspect Profile ↗
+                  </Link>
+                </div>
               </div>
             );
           })}
@@ -302,12 +253,21 @@ export default function AgentsPage() {
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setActiveAgent(null)}
-              className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition shadow-sm"
-            >
-              ← Back to Workforce
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/agents/${activeAgent.id}`}
+                className="rounded-lg border border-indigo-200 bg-indigo-50/70 px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition shadow-2xs flex items-center gap-1"
+              >
+                <span>Full Profile &amp; Matrix</span>
+                <span>↗</span>
+              </Link>
+              <button
+                onClick={() => setActiveAgent(null)}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition shadow-sm"
+              >
+                ← Back to Workforce
+              </button>
+            </div>
           </div>
 
           {/* SUGGESTED PROMPTS BAR */}

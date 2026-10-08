@@ -13,7 +13,14 @@ from app.api.auth import get_current_user
 from app.db.database import get_db
 from app.models.auth import User
 from app.models.document import Document, DocumentChunk, DocumentPermission
-from app.schemas.agent import AgentProfile, AgentResponse, AgentRunRequest, ToolExecution
+from app.schemas.agent import (
+    AgentDetailResponse,
+    AgentProfile,
+    AgentResponse,
+    AgentRunRequest,
+    BoundDocumentSummary,
+    ToolExecution,
+)
 from app.schemas.chat import CitationSource
 from app.services.ai_service import cosine_similarity, generate_completion, get_embedding
 from app.services.auth_service import log_auth_event
@@ -141,6 +148,84 @@ def list_agents(current_user: User = Depends(get_current_user)) -> List[AgentPro
             allowed_tools=a["allowed_tools"]
         ) for a in AGENT_PROFILES.values()
     ]
+
+
+@router.get("/{agent_id}", response_model=AgentDetailResponse)
+def get_agent(
+    agent_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AgentDetailResponse:
+    """Retrieve detailed agent profile including system persona, tool security matrix, and bound documents."""
+    if agent_id not in AGENT_PROFILES:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent profile '{agent_id}' not found"
+        )
+    agent = AGENT_PROFILES[agent_id]
+
+    # Query bound documents accessible to current_user
+    if current_user.role.name in ("Admin", "CEO"):
+        statement = select(Document)
+    else:
+        owner_cond = (Document.owner_id == current_user.id)
+        org_cond = (Document.default_access == "ORGANIZATION")
+        dept_cond = (Document.default_access == "DEPARTMENT") & (Document.department_id == current_user.department_id) if current_user.department_id else False
+        team_cond = (Document.default_access == "TEAM") & (Document.team_id == current_user.team_id) if current_user.team_id else False
+
+        subjects = [("USER", current_user.id), ("ROLE", str(current_user.role_id))]
+        if current_user.department_id:
+            subjects.append(("DEPARTMENT", str(current_user.department_id)))
+        if current_user.team_id:
+            subjects.append(("TEAM", str(current_user.team_id)))
+
+        clauses = [
+            (DocumentPermission.subject_type == s_type) & (DocumentPermission.subject_id == s_id)
+            for s_type, s_id in subjects
+        ]
+
+        filter_conds = [owner_cond, org_cond, dept_cond, team_cond]
+        if clauses:
+            explicit_ids = select(DocumentPermission.document_id).where(or_(*clauses))
+            filter_conds.append(Document.id.in_(explicit_ids))
+
+        statement = select(Document).where(or_(*filter_conds))
+
+    if agent["collection_bind"] != "All":
+        statement = statement.where(Document.collection == agent["collection_bind"])
+
+    statement = statement.order_by(Document.updated_at.desc())
+    docs = list(db.scalars(statement))
+
+    bound_docs = [
+        BoundDocumentSummary(
+            id=d.id,
+            name=d.name,
+            collection=d.collection,
+            classification=d.classification,
+            size_bytes=d.size_bytes,
+            created_at=d.created_at.isoformat() if d.created_at else "",
+        )
+        for d in docs
+    ]
+
+    tool_matrix = {
+        tool: sorted(list(ALLOWED_ROLES_FOR_TOOLS.get(tool, set())))
+        for tool in agent["allowed_tools"]
+    }
+
+    return AgentDetailResponse(
+        id=agent["id"],
+        name=agent["name"],
+        description=agent["description"],
+        collection_bind=agent["collection_bind"],
+        status=agent["status"],
+        allowed_tools=agent["allowed_tools"],
+        system_persona=agent["system_persona"],
+        tool_security_matrix=tool_matrix,
+        bound_documents_count=len(bound_docs),
+        bound_documents=bound_docs,
+    )
 
 
 @router.post("/{agent_id}/run", response_model=AgentResponse)

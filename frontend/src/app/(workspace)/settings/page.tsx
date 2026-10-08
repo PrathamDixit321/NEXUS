@@ -16,10 +16,18 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<"profile" | "security" | "sessions" | "preferences">("profile");
 
   // Profile Form States
-  const [fullName, setFullName] = useState("");
-  const [department, setDepartment] = useState("");
-  const [companyName, setCompanyName] = useState("");
+  const [prevUser, setPrevUser] = useState(user);
+  const [fullName, setFullName] = useState(user?.full_name || "");
+  const [department, setDepartment] = useState(user?.department || "");
+  const [companyName, setCompanyName] = useState(user?.company_name || "");
   const [savingProfile, setSavingProfile] = useState(false);
+
+  if (user !== prevUser) {
+    setPrevUser(user);
+    setFullName(user?.full_name || "");
+    setDepartment(user?.department || "");
+    setCompanyName(user?.company_name || "");
+  }
 
   // Security Form States
   const [currentPassword, setCurrentPassword] = useState("");
@@ -42,15 +50,6 @@ export default function SettingsPage() {
   // Status & Feedback Messages
   const [feedbackSuccess, setFeedbackSuccess] = useState("");
   const [feedbackError, setFeedbackError] = useState("");
-
-  // Sync profile fields from user context
-  useEffect(() => {
-    if (user) {
-      setFullName(user.full_name || "");
-      setDepartment(user.department || "");
-      setCompanyName(user.company_name || "");
-    }
-  }, [user]);
 
   // Load active sessions when sessions tab is selected
   const loadSessions = async () => {
