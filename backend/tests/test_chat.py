@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.db.database import SessionLocal
 from app.main import app
 from app.models.auth import AuditLog, User, UserSession
+from app.models.chat import ChatSession, ChatMessage
 from app.models.document import Document, DocumentChunk
 
 
@@ -15,6 +16,8 @@ def clear_db() -> None:
     """Helper to wipe workspace tables before RAG search pipeline verification."""
     db = SessionLocal()
     try:
+        db.query(ChatMessage).delete()
+        db.query(ChatSession).delete()
         db.query(DocumentChunk).delete()
         db.query(Document).delete()
         db.query(UserSession).delete()
@@ -109,3 +112,87 @@ def test_chat_rag_pipeline_and_citations() -> None:
             mock_embed.assert_called_once_with("What is the policy for admin credentials?")
             # Completion should have been called with system prompt containing context and user prompt
             mock_complete.assert_called_once()
+
+
+def test_chat_sessions_lifecycle() -> None:
+    """Verify chat session creation, listing, messaging with persistence, update, and deletion."""
+    clear_db()
+
+    with TestClient(app) as client:
+        # 1. Register test user
+        reg_payload = {
+            "email": "chatuser@nexus.ai",
+            "password": "securepassword123",
+            "full_name": "Chat Specialist",
+            "department": "Engineering",
+            "company_name": "NexusAI Inc."
+        }
+        reg_res = client.post("/api/v1/auth/register", json=reg_payload)
+        assert reg_res.status_code == 201
+        token = reg_res.json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Initially sessions list is empty
+        list_res = client.get("/api/v1/chat/sessions", headers=headers)
+        assert list_res.status_code == 200
+        assert len(list_res.json()) == 0
+
+        # 3. Create a new session
+        create_payload = {
+            "title": "New Conversation",
+            "collection": "HR"
+        }
+        create_res = client.post("/api/v1/chat/sessions", json=create_payload, headers=headers)
+        assert create_res.status_code == 201
+        session_data = create_res.json()
+        session_id = session_data["id"]
+        assert session_data["title"] == "New Conversation"
+        assert session_data["collection"] == "HR"
+        assert len(session_data["messages"]) == 0
+
+        # 4. Post message into session
+        with patch("app.api.chat.get_embedding", return_value=[0.0] * 768), \
+             patch("app.api.chat.generate_completion", return_value="Here is your HR policy explanation."):
+
+            msg_payload = {
+                "message": "What is our leave policy for vacation?",
+                "session_id": session_id
+            }
+            chat_res = client.post("/api/v1/chat", json=msg_payload, headers=headers)
+            assert chat_res.status_code == 200
+            chat_data = chat_res.json()
+            assert chat_data["session_id"] == session_id
+            assert chat_data["response"] != ""
+
+        # 5. Fetch session details and verify auto-titling and persisted messages
+        get_res = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers)
+        assert get_res.status_code == 200
+        detail_data = get_res.json()
+        assert detail_data["id"] == session_id
+        # Title auto-updated from query
+        assert "leave policy" in detail_data["title"].lower()
+        # Has user message and assistant message
+        assert len(detail_data["messages"]) == 2
+        assert detail_data["messages"][0]["role"] == "user"
+        assert detail_data["messages"][0]["content"] == "What is our leave policy for vacation?"
+        assert detail_data["messages"][1]["role"] == "assistant"
+
+        # 6. Rename session
+        patch_res = client.patch(
+            f"/api/v1/chat/sessions/{session_id}",
+            json={"title": "Custom Vacation Title", "collection": "General"},
+            headers=headers
+        )
+        assert patch_res.status_code == 200
+        assert patch_res.json()["title"] == "Custom Vacation Title"
+        assert patch_res.json()["collection"] == "General"
+
+        # 7. Delete session
+        del_res = client.delete(f"/api/v1/chat/sessions/{session_id}", headers=headers)
+        assert del_res.status_code == 200
+        assert del_res.json()["status"] == "deleted"
+
+        # 8. Fetching deleted session returns 404
+        nf_res = client.get(f"/api/v1/chat/sessions/{session_id}", headers=headers)
+        assert nf_res.status_code == 404
+

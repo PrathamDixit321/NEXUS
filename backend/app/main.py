@@ -23,6 +23,7 @@ from app.models.document import Document  # noqa: F401 - registers the table wit
 from app.models.auth import User, Role, Permission, UserSession, AuditLog  # noqa: F401 - registers auth tables
 from app.models.operations import Task, Report  # noqa: F401 - registers operations tables
 from app.models.automation import Workflow, WorkflowRun, ApiKey  # noqa: F401 - registers automation tables
+from app.models.chat import ChatSession, ChatMessage  # noqa: F401 - registers chat tables
 from app.db.seed import seed_roles_and_permissions
 
 
